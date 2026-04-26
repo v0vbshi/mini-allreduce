@@ -16,6 +16,13 @@ public:
         }
         return *this;
     }
+
+    Tensor clone() const {
+        Tensor copy(_size);
+        copy._data = _data;
+        return copy;
+    }
+    
     // deleted copy constructor
     Tensor(const Tensor&) = delete;
     // deleted copy assignment
