@@ -1,29 +1,54 @@
 #include "../include/allreduce.hpp"
-#include <mutex>
+#include <cassert>
+#include <iostream>
 
 static std::mutex mtx;
 static std::vector<float> shared_buf;
 
 void allreduce(Tensor& t, Communicator& comm, int rank, int world_size) {
-    // Step 1: rank 0 initializes shared_buf
-    if (rank == 0) {
-        shared_buf.assign(t.size(), 0.0f);
-    }
-    // Step 2: barrier - wait for rank 0 to finish init
-    comm.barrier();
-    {
-    // Step 3: add under lock - wait for all ranks
-        std::lock_guard<std::mutex> lock(mtx);
-        for (size_t i = 0; i < t.size(); i++) {
-            shared_buf[i] += t.data()[i];
+    assert(t.size() % world_size == 0);
+    size_t chunk_size = t.size() / world_size;
+    int right = (rank + 1) % world_size;
+    int left = (rank - 1 + world_size) % world_size;
+    // Phase 1: reduce scatter
+    // After N-1 steps, each rank owns one fully reduced chunk
+    for (int i = 0; i < world_size - 1; i++) {
+        int send_chunk = (rank - i + world_size) % world_size;
+        int recv_chunk = (rank - i - 1 + world_size) % world_size;
+
+        // send chunk to the right neighbor
+        comm.send(right, t.slice(send_chunk * chunk_size, chunk_size));
+
+        // recieve chunk from the left neighbor
+        Tensor incoming(chunk_size);
+        comm.recv(left, incoming);
+
+        // add recieved into local
+        size_t offset = recv_chunk * chunk_size;
+        for (size_t i = 0; i < chunk_size; i++) {
+            t.data()[offset + i] += incoming.data()[i];
         }
     }
-    // Step 4: wo release locking with {} we could run into deadlock
-    // barrier - wait for all ranks to finish adding 
-    comm.barrier();
 
-    // Step 5: every rank copies shared_buff back into t
-    for (size_t i = 0; i < t.size(); i++) {
-        t.data()[i] = shared_buf[i];
+    std::cout << rank << " after ReduceScatter: ";
+    for (float v : t.data()) {
+        std::cout << v << " ";
+    }
+    std::cout << "\n";
+
+    // Phrase 2: All Gather 
+    // After N-1 steps, each rank owns the full size data
+    for (int i = 0; i < world_size - 1; i++) {
+        int send_chunk = (rank + 1 -i + world_size) % world_size;
+        int recv_chunk = (rank - i + world_size) % world_size;
+
+        // send chunks
+        comm.send(right, t.slice(send_chunk * chunk_size, chunk_size));
+
+        // recieve chunks
+        Tensor incoming(chunk_size);
+        comm.recv(left, incoming);
+
+        t.write_slice(recv_chunk * chunk_size, incoming);
     }
 }
