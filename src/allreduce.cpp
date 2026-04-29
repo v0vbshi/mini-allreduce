@@ -1,9 +1,5 @@
 #include "../include/allreduce.hpp"
 #include <cassert>
-#include <iostream>
-
-static std::mutex mtx;
-static std::vector<float> shared_buf;
 
 void allreduce(Tensor& t, Communicator& comm, int rank, int world_size) {
     assert(t.size() % world_size == 0);
@@ -29,12 +25,6 @@ void allreduce(Tensor& t, Communicator& comm, int rank, int world_size) {
             t.data()[offset + i] += incoming.data()[i];
         }
     }
-
-    std::cout << rank << " after ReduceScatter: ";
-    for (float v : t.data()) {
-        std::cout << v << " ";
-    }
-    std::cout << "\n";
 
     // Phrase 2: All Gather 
     // After N-1 steps, each rank owns the full size data
