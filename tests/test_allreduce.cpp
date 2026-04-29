@@ -1,26 +1,6 @@
 #include <gtest/gtest.h>
 #include <thread>
-#include "../include/tensor.hpp"
-#include "../include/allreduce.hpp"
-#include "../include/mock_communicator.hpp"
-
-void run_allreduce(std::vector<Tensor>& tensors, int world_size) {
-    auto channels = std::vector<std::shared_ptr<Channel>>(world_size);
-    for (auto& ch : channels) ch = std::make_shared<Channel>();
-
-    auto barrier_count = std::make_shared<std::atomic<int>>(0);
-    auto barrier_mtx   = std::make_shared<std::mutex>();
-    auto barrier_cv    = std::make_shared<std::condition_variable>();
-
-    std::vector<std::thread> threads;
-    for (int r = 0; r < world_size; r++) {
-        threads.emplace_back([&, r]() {
-            MockCommunicator comm(r, world_size, channels, barrier_count, barrier_mtx, barrier_cv);
-            allreduce(tensors[r], comm, r, world_size);
-        });
-    }
-    for (auto& th : threads) th.join();
-}
+#include "../include/test_utils.hpp"
 
 TEST(AllReduceTest, TwoRanks) {
     std::vector<Tensor> tensors;
@@ -61,7 +41,7 @@ TEST(AllReduceTest, AllZeros) {
     std::vector<Tensor> tensors;
     int ranks = 2;
     tensors.reserve(ranks);
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < ranks; i++) {
         tensors.emplace_back(4);
         tensors[i].data() = {0.0f, 0.0f, 0.0f, 0.0f};
     }
