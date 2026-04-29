@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <thread>
+#include <stdexcept>
 #include "../include/test_utils.hpp"
 
 TEST(AllReduceTest, TwoRanks) {
@@ -35,6 +36,20 @@ TEST(AllReduceTest, FourRanks) {
         EXPECT_FLOAT_EQ(tensors[r].data()[2], 12.0f);
         EXPECT_FLOAT_EQ(tensors[r].data()[3], 16.0f);
     }
+}
+
+TEST(MockCommunicatorTest, RecvThrowsOnTimeout) {
+    int world_size = 2;
+    std::vector<std::shared_ptr<Channel>> channels;
+    std::shared_ptr<std::atomic<int>> barrier_count;
+    std::shared_ptr<std::mutex> barrier_mtx;
+    std::shared_ptr<std::condition_variable> barrier_cv;
+    make_shared_state(world_size, channels, barrier_count, barrier_mtx, barrier_cv);
+
+    // rank 0 waits for a message from rank 1 that never arrives
+    MockCommunicator comm(0, world_size, channels, barrier_count, barrier_mtx, barrier_cv, /*timeout_ms=*/50);
+    Tensor t(4);
+    EXPECT_THROW(comm.recv(1, t), std::runtime_error);
 }
 
 TEST(AllReduceTest, AllZeros) {
