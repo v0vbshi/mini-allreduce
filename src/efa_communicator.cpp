@@ -22,7 +22,7 @@ void EfaCommunicator::send(int to_rank, const Tensor& t) {
 }
 
 void EfaCommunicator::recv(int from_rank, Tensor& t) {
-    // Step 1: check lock for each recieve
+    // Step 1: check lock for each receive
     std::unique_lock<std::mutex> lock(_channels[from_rank]->mtx);
     _channels[from_rank]->cv.wait(lock, [&] {
         return !_channels[from_rank]->queue.empty();

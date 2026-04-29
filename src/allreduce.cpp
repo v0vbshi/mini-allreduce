@@ -15,27 +15,27 @@ void allreduce(Tensor& t, Communicator& comm, int rank, int world_size) {
         // send chunk to the right neighbor
         comm.send(right, t.slice(send_chunk * chunk_size, chunk_size));
 
-        // recieve chunk from the left neighbor
+        // receive chunk from the left neighbor
         Tensor incoming(chunk_size);
         comm.recv(left, incoming);
 
-        // add recieved into local
+        // add received into local
         size_t offset = recv_chunk * chunk_size;
-        for (size_t i = 0; i < chunk_size; i++) {
-            t.data()[offset + i] += incoming.data()[i];
+        for (size_t j = 0; j < chunk_size; j++) {
+            t.data()[offset + j] += incoming.data()[j];
         }
     }
 
-    // Phrase 2: All Gather 
+    // Phase 2: AllGather
     // After N-1 steps, each rank owns the full size data
     for (int i = 0; i < world_size - 1; i++) {
-        int send_chunk = (rank + 1 -i + world_size) % world_size;
+        int send_chunk = (rank + 1 - i + world_size) % world_size;
         int recv_chunk = (rank - i + world_size) % world_size;
 
-        // send chunks
+        // send chunk to right neighbor
         comm.send(right, t.slice(send_chunk * chunk_size, chunk_size));
 
-        // recieve chunks
+        // receive chunk from left neighbor
         Tensor incoming(chunk_size);
         comm.recv(left, incoming);
 
