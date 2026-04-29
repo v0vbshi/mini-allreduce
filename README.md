@@ -98,6 +98,38 @@ world_size | tensor_size | GB/s    | ms
 
 Note: these numbers reflect memory bandwidth on a single machine, not network throughput. On real Trainium with EFA, the bottleneck shifts to the network fabric.
 
+**EFA mock (5µs simulated send latency):**
+
+```
+world_size | tensor_size | GB/s   | ms
+-----------|-------------|--------|------
+2          | 65K floats  | 0.49   | 1.07
+2          | 1M floats   | 0.53   | 15.9
+4          | 65K floats  | 0.61   | 1.73
+4          | 1M floats   | 0.67   | 25.1
+8          | 65K floats  | 0.64   | 3.28
+8          | 1M floats   | 0.79   | 42.7
+```
+
+**Why EFA mock sometimes beats the plain mock:**
+
+`sleep_for(5µs)` is a voluntary yield — the OS immediately schedules another thread, so threads take turns cleanly:
+
+```
+Without sleep (plain mock):
+  Thread 0: send → immediately grabs lock → Thread 1 spins waiting → Thread 2 spins waiting
+  All 8 threads competing for CPU → heavy context switch overhead
+
+With sleep_for(5µs) (EFA mock):
+  Thread 0: send → sleeps → OS schedules Thread 1
+  Thread 1: send → sleeps → OS schedules Thread 2
+  Threads yield cooperatively → less contention → better throughput
+```
+
+On real EFA the 5µs is spent waiting for a network ACK — the CPU is blocked on hardware, not voluntarily yielding. Other threads cannot use that time because the network is the bottleneck, not the CPU scheduler. `sleep_for` is cooperative and accidentally helpful; real network latency is involuntary and blocks progress.
+
+A production simulation would model true network backpressure with a token bucket rather than a sleep.
+
 ## Architecture
 
 Three layers:
@@ -115,6 +147,7 @@ mkdir build && cd build
 cmake .. && make
 ./mini-allreduce        # runs demo with 4 ranks
 ./test_allreduce        # runs GoogleTest suite
+./bench_allreduce       # runs throughput benchmarks (mock + EFA)
 ```
 
 Requires: CMake 3.16+, C++17, internet connection (GoogleTest fetched automatically).
