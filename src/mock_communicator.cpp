@@ -1,4 +1,5 @@
 #include "../include/mock_communicator.hpp"
+#include <stdexcept>
 using namespace std;
 
 MockCommunicator::MockCommunicator(int rank, int world_size, 
@@ -9,6 +10,8 @@ MockCommunicator::MockCommunicator(int rank, int world_size,
     _barrier_count(barrier_count), _barrier_mtx(barrier_mtx), _barrier_cv(barrier_cv) {}
 
 void MockCommunicator::send(int to_rank, const Tensor& t) {
+    if (to_rank < 0 || to_rank >= _world_size)
+        throw std::out_of_range("send: to_rank " + std::to_string(to_rank) + " out of range");
     // Step 1: lock channel for each send
     {
         std::lock_guard<std::mutex> lock(_channels[_rank]->mtx);
@@ -18,6 +21,8 @@ void MockCommunicator::send(int to_rank, const Tensor& t) {
 }
 
 void MockCommunicator::recv(int from_rank, Tensor& t) {
+    if (from_rank < 0 || from_rank >= _world_size)
+        throw std::out_of_range("recv: from_rank " + std::to_string(from_rank) + " out of range");
     // Step 1: check lock for each receive
     std::unique_lock<std::mutex> lock(_channels[from_rank]->mtx);
     _channels[from_rank]->cv.wait(lock, [&] {

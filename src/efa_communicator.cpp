@@ -1,6 +1,14 @@
 #include "../include/efa_communicator.hpp"
 #include <thread>
+#include <stdexcept>
 using namespace std;
+
+// TODO: Real EFA port
+// Replace send/recv bodies with libfabric calls:
+//   fi_send(ep, buf, len, desc, dest_addr, context)  — post send buffer
+//   fi_recv(ep, buf, len, desc, src_addr, context)   — post recv buffer
+//   fi_cq_read(cq, entry, count)                     — poll completion queue
+// Barrier maps to fi_barrier or nccom_barrier() from Neuron Collectives.
 
 EfaCommunicator::EfaCommunicator(int rank, int world_size, int sleep_ms,
     vector<shared_ptr<Channel>> channels, shared_ptr<atomic<int>> barrier_count,
@@ -11,6 +19,8 @@ EfaCommunicator::EfaCommunicator(int rank, int world_size, int sleep_ms,
     _sleep_ms(sleep_ms) {}
 
 void EfaCommunicator::send(int to_rank, const Tensor& t) {
+    if (to_rank < 0 || to_rank >= _world_size)
+        throw std::out_of_range("send: to_rank " + std::to_string(to_rank) + " out of range");
     // Step 0: Sleep before send 
     std::this_thread::sleep_for(std::chrono::microseconds(_sleep_ms));
     // Step 1: lock channel for each send
@@ -22,6 +32,8 @@ void EfaCommunicator::send(int to_rank, const Tensor& t) {
 }
 
 void EfaCommunicator::recv(int from_rank, Tensor& t) {
+    if (from_rank < 0 || from_rank >= _world_size)
+        throw std::out_of_range("recv: from_rank " + std::to_string(from_rank) + " out of range");
     // Step 1: check lock for each receive
     std::unique_lock<std::mutex> lock(_channels[from_rank]->mtx);
     _channels[from_rank]->cv.wait(lock, [&] {
